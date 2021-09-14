@@ -1,5 +1,5 @@
 ﻿# VanillaCore
-![Maven Tests](https://github.com/elasql/elasql/actions/workflows/github_actions.yml/badge.svg)
+![Maven Tests](https://github.com/vanilladb/vanillacore/actions/workflows/github_actions.yml/badge.svg)
 [![Build Status](https://travis-ci.org/vanilladb/vanillacore.svg?branch=master)](https://travis-ci.org/vanilladb/vanillacore)
 [![Apache 2.0 License](https://img.shields.io/badge/license-apache%202.0-orange.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Maven Central](https://img.shields.io/maven-central/v/org.vanilladb/core.svg)](https://maven-badges.herokuapp.com/maven-central/org.vanilladb/core)
