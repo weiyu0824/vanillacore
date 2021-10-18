@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.vanilladb.core.server.VanillaDb;
 import org.vanilladb.core.storage.file.BlockId;
 import org.vanilladb.core.storage.file.FileMgr;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * Manages the pinning and unpinning of buffers to blocks.
@@ -33,7 +34,7 @@ class BufferPoolMgr {
 	private AtomicInteger numAvailable;
 
 	// Optimization: Lock striping
-	private Object[] anchors = new Object[1009];
+	private Object[] anchors = new Object[10099];
 
 	/**
 	 * Creates a buffer manager having the specified number of buffer slots.
@@ -93,7 +94,11 @@ class BufferPoolMgr {
 	 */
 	Buffer pin(BlockId blk) {
 		// Only the txs acquiring the same block will be blocked
+		// PROFILE
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("beforeLock");
 		synchronized (prepareAnchor(blk)) {
+			profiler.startComponentProfiler("afterLock");
 			// Find existing buffer
 			Buffer buff = findExistingBuffer(blk);
 
@@ -125,15 +130,21 @@ class BufferPoolMgr {
 								
 								// Pin this buffer
 								buff.pin();
+								profiler.stopComponentProfiler("afterLock");
+								profiler.stopComponentProfiler("beforeLock");
 								return buff;
 							}
 						} finally {
 							// Release the lock of buffer
+							profiler.stopComponentProfiler("afterLock");
+							profiler.stopComponentProfiler("beforeLock");
 							buff.getExternalLock().unlock();
 						}
 					}
 					currBlk = (currBlk + 1) % bufferPool.length;
 				}
+				profiler.stopComponentProfiler("afterLock");
+				profiler.stopComponentProfiler("beforeLock");
 				return null;
 				
 			// If it exists
@@ -147,12 +158,17 @@ class BufferPoolMgr {
 						if (!buff.isPinned())
 							numAvailable.decrementAndGet();
 						buff.pin();
+						profiler.stopComponentProfiler("afterLock");
+						profiler.stopComponentProfiler("beforeLock");
 						return buff;
 					}
+					profiler.stopComponentProfiler("afterLock");
+					profiler.stopComponentProfiler("beforeLock");
 					return pin(blk);
-					
 				} finally {
 					// Release the lock of buffer
+					profiler.stopComponentProfiler("afterLock");
+					profiler.stopComponentProfiler("beforeLock");
 					buff.getExternalLock().unlock();
 				}
 			}
@@ -171,9 +187,11 @@ class BufferPoolMgr {
 	 * @return the pinned buffer
 	 */
 	Buffer pinNew(String fileName, PageFormatter fmtr) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("beforeFileLock");
 		// Only the txs acquiring to append the block on the same file will be blocked
 		synchronized (prepareAnchor(fileName)) {
-			
+			profiler.startComponentProfiler("afterFileLock");
 			// Choose Unpinned Buffer
 			int lastReplacedBuff = this.lastReplacedBuff;
 			int currBlk = (lastReplacedBuff + 1) % bufferPool.length;
@@ -197,15 +215,21 @@ class BufferPoolMgr {
 							
 							// Pin this buffer
 							buff.pin();
+							profiler.stopComponentProfiler("afterFileLock");
+							profiler.stopComponentProfiler("beforeFileLock");
 							return buff;
 						}
 					} finally {
+						profiler.stopComponentProfiler("afterFileLock");
+						profiler.stopComponentProfiler("beforeFileLock");
 						// Release the lock of buffer
 						buff.getExternalLock().unlock();
 					}
 				}
 				currBlk = (currBlk + 1) % bufferPool.length;
 			}
+			profiler.stopComponentProfiler("afterFileLock");
+			profiler.stopComponentProfiler("beforeFileLock");
 			return null;
 		}
 	}
