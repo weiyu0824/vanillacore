@@ -142,8 +142,11 @@ public class FileMgr {
 			// clear the buffer
 			buffer.clear();
 
+			TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+			profiler.startComponentProfiler("fileRead");
 			// read a block from file
 			fileChannel.read(buffer, blk.number() * BLOCK_SIZE);
+			profiler.stopComponentProfiler("fileRead");
 			
 			// for controller
 			TransactionProfiler.getLocalProfiler().incrementDiskIOCount();
@@ -168,8 +171,11 @@ public class FileMgr {
 			// rewind the buffer
 			buffer.rewind();
 
+			TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+			profiler.startComponentProfiler("fileWrite");
 			// write the block to the file
 			fileChannel.write(buffer, blk.number() * BLOCK_SIZE);
+			profiler.stopComponentProfiler("fileWrite");
 			
 			// for controller
 			TransactionProfiler.getLocalProfiler().incrementDiskIOCount();
@@ -195,8 +201,11 @@ public class FileMgr {
 			// Rewind the buffer for writing
 			buffer.rewind();
 
+			TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+			profiler.startComponentProfiler("fileAppend");
 			// Append the block to the file
 			long newSize = fileChannel.append(buffer);
+			profiler.stopComponentProfiler("fileAppend");
 
 			// Return the new block id
 			return new BlockId(fileName, newSize / BLOCK_SIZE - 1);
@@ -246,6 +255,8 @@ public class FileMgr {
 	 * @throws IOException
 	 */
 	private IoChannel getFileChannel(String fileName) throws IOException {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("getFileChannel");
 		synchronized (prepareAnchor(fileName)) {
 			IoChannel fileChannel = openFiles.get(fileName);
 
@@ -256,7 +267,7 @@ public class FileMgr {
 
 				openFiles.put(fileName, fileChannel);
 			}
-
+			profiler.stopComponentProfiler("getFileChannel");
 			return fileChannel;
 		}
 	}

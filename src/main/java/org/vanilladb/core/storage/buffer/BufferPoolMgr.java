@@ -37,7 +37,7 @@ class BufferPoolMgr {
 	private Object[] anchors = new Object[1009];
 	
 	static {
-		System.out.println("Anchors: 1009, profile blockMap, fileIO");
+		System.out.println("Anchors: 1009, profile fileIO, and getFileChannel");
 	}
 
 	/**
@@ -100,9 +100,9 @@ class BufferPoolMgr {
 		// Only the txs acquiring the same block will be blocked
 		// PROFILE
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
-		profiler.startComponentProfiler("beforeLock");
+		profiler.startComponentProfiler("beforeBlockLatch");
 		synchronized (prepareAnchor(blk)) {
-			profiler.startComponentProfiler("afterLock");
+			profiler.startComponentProfiler("afterBlockLatch");
 			// Find existing buffer
 			Buffer buff = findExistingBuffer(blk, profiler);
 
@@ -140,21 +140,21 @@ class BufferPoolMgr {
 								
 								// Pin this buffer
 								buff.pin();
-								profiler.stopComponentProfiler("afterLock");
-								profiler.stopComponentProfiler("beforeLock");
+								profiler.stopComponentProfiler("afterBlockLatch");
+								profiler.stopComponentProfiler("beforeBlockLatch");
 								return buff;
 							}
 						} finally {
 							// Release the lock of buffer
-							profiler.stopComponentProfiler("afterLock");
-							profiler.stopComponentProfiler("beforeLock");
+							profiler.stopComponentProfiler("afterBlockLatch");
+							profiler.stopComponentProfiler("beforeBlockLatch");
 							buff.getExternalLock().unlock();
 						}
 					}
 					currBlk = (currBlk + 1) % bufferPool.length;
 				}
-				profiler.stopComponentProfiler("afterLock");
-				profiler.stopComponentProfiler("beforeLock");
+				profiler.stopComponentProfiler("afterBlockLatch");
+				profiler.stopComponentProfiler("beforeBlockLatch");
 				return null;
 				
 			// If it exists
@@ -168,17 +168,17 @@ class BufferPoolMgr {
 						if (!buff.isPinned())
 							numAvailable.decrementAndGet();
 						buff.pin();
-						profiler.stopComponentProfiler("afterLock");
-						profiler.stopComponentProfiler("beforeLock");
+						profiler.stopComponentProfiler("afterBlockLatch");
+						profiler.stopComponentProfiler("beforeBlockLatch");
 						return buff;
 					}
-					profiler.stopComponentProfiler("afterLock");
-					profiler.stopComponentProfiler("beforeLock");
+					profiler.stopComponentProfiler("afterBlockLatch");
+					profiler.stopComponentProfiler("beforeBlockLatch");
 					return pin(blk);
 				} finally {
 					// Release the lock of buffer
-					profiler.stopComponentProfiler("afterLock");
-					profiler.stopComponentProfiler("beforeLock");
+					profiler.stopComponentProfiler("afterBlockLatch");
+					profiler.stopComponentProfiler("beforeBlockLatch");
 					buff.getExternalLock().unlock();
 				}
 			}
@@ -198,10 +198,10 @@ class BufferPoolMgr {
 	 */
 	Buffer pinNew(String fileName, PageFormatter fmtr) {
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
-		profiler.startComponentProfiler("beforeFileLock");
+		profiler.startComponentProfiler("beforeFileLatch");
 		// Only the txs acquiring to append the block on the same file will be blocked
 		synchronized (prepareAnchor(fileName)) {
-			profiler.startComponentProfiler("afterFileLock");
+			profiler.startComponentProfiler("afterFileLatch");
 			// Choose Unpinned Buffer
 			int lastReplacedBuff = this.lastReplacedBuff;
 			int currBlk = (lastReplacedBuff + 1) % bufferPool.length;
@@ -216,30 +216,36 @@ class BufferPoolMgr {
 							
 							// Swap
 							BlockId oldBlk = buff.block();
-							if (oldBlk != null)
+							if (oldBlk != null) {
+								profiler.startComponentProfiler("blockMap");
 								blockMap.remove(oldBlk);
+								profiler.stopComponentProfiler("blockMap");
+							}
+								
 							buff.assignToNew(fileName, fmtr);
+							profiler.startComponentProfiler("blockMap");
 							blockMap.put(buff.block(), buff);
+							profiler.stopComponentProfiler("blockMap");
 							if (!buff.isPinned())
 								numAvailable.decrementAndGet();
 							
 							// Pin this buffer
 							buff.pin();
-							profiler.stopComponentProfiler("afterFileLock");
-							profiler.stopComponentProfiler("beforeFileLock");
+							profiler.stopComponentProfiler("afterFileLatch");
+							profiler.stopComponentProfiler("beforeFileLatch");
 							return buff;
 						}
 					} finally {
-						profiler.stopComponentProfiler("afterFileLock");
-						profiler.stopComponentProfiler("beforeFileLock");
+						profiler.stopComponentProfiler("afterFileLatch");
+						profiler.stopComponentProfiler("beforeFileLatch");
 						// Release the lock of buffer
 						buff.getExternalLock().unlock();
 					}
 				}
 				currBlk = (currBlk + 1) % bufferPool.length;
 			}
-			profiler.stopComponentProfiler("afterFileLock");
-			profiler.stopComponentProfiler("beforeFileLock");
+			profiler.stopComponentProfiler("afterFileLatch");
+			profiler.stopComponentProfiler("beforeFileLatch");
 			return null;
 		}
 	}
