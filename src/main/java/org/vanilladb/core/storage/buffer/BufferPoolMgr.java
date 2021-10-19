@@ -34,7 +34,11 @@ class BufferPoolMgr {
 	private AtomicInteger numAvailable;
 
 	// Optimization: Lock striping
-	private Object[] anchors = new Object[10099];
+	private Object[] anchors = new Object[1009];
+	
+	static {
+		System.out.println("Anchors: 1009, profile blockMap, fileIO");
+	}
 
 	/**
 	 * Creates a buffer manager having the specified number of buffer slots.
@@ -100,7 +104,7 @@ class BufferPoolMgr {
 		synchronized (prepareAnchor(blk)) {
 			profiler.startComponentProfiler("afterLock");
 			// Find existing buffer
-			Buffer buff = findExistingBuffer(blk);
+			Buffer buff = findExistingBuffer(blk, profiler);
 
 			// If there is no such buffer
 			if (buff == null) {
@@ -121,10 +125,16 @@ class BufferPoolMgr {
 								
 								// Swap
 								BlockId oldBlk = buff.block();
-								if (oldBlk != null)
+								if (oldBlk != null) {
+									profiler.startComponentProfiler("blockMap");
 									blockMap.remove(oldBlk);
+									profiler.stopComponentProfiler("blockMap");
+								}
+									
 								buff.assignToBlock(blk);
+								profiler.startComponentProfiler("blockMap");
 								blockMap.put(blk, buff);
+								profiler.stopComponentProfiler("blockMap");
 								if (!buff.isPinned())
 									numAvailable.decrementAndGet();
 								
@@ -264,8 +274,10 @@ class BufferPoolMgr {
 		return numAvailable.get();
 	}
 
-	private Buffer findExistingBuffer(BlockId blk) {
+	private Buffer findExistingBuffer(BlockId blk, TransactionProfiler profiler) {
+		profiler.startComponentProfiler("blockMap");
 		Buffer buff = blockMap.get(blk);
+		profiler.stopComponentProfiler("blockMap");
 		if (buff != null && buff.block().equals(blk))
 			return buff;
 		return null;
