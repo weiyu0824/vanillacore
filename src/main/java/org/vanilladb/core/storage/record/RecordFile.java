@@ -25,6 +25,7 @@ import org.vanilladb.core.storage.file.BlockId;
 import org.vanilladb.core.storage.file.Page;
 import org.vanilladb.core.storage.metadata.TableInfo;
 import org.vanilladb.core.storage.tx.Transaction;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * Manages a file of records. There are methods for iterating through the
@@ -82,7 +83,10 @@ public class RecordFile implements Record {
 	 *            the transaction
 	 */
 	public static void formatFileHeader(String fileName, Transaction tx) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("formatFileHeaderWaitFileLock");
 		tx.concurrencyMgr().modifyFile(fileName);
+		profiler.stopComponentProfiler("formatFileHeaderWaitFileLock");
 		// header should be the first block of the given file
 		if (VanillaDb.fileMgr().size(fileName) == 0) {
 			FileHeaderFormatter fhf = new FileHeaderFormatter();
@@ -222,35 +226,50 @@ public class RecordFile implements Record {
 		// Block read-only transaction
 		if (tx.isReadOnly() && !isTempTable())
 			throw new UnsupportedOperationException();
+		
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 
 		// Insertion may change the properties of this file,
 		// so that we need to lock the file.
-		if (!isTempTable())
+		if (!isTempTable()) {
+			profiler.startComponentProfiler("insertWaitFileLock");
 			tx.concurrencyMgr().modifyFile(fileName);
+			profiler.stopComponentProfiler("insertWaitFileLock");
+		}
+			
 
 		// Modify the free chain which is start from a pointer in
 		// the header of the file.
+		
+		
+		profiler.startComponentProfiler("insertFhpOperation");
 		if (fhp == null)
 			fhp = openHeaderForModification();
 
+		profiler.stopComponentProfiler("insertFhpOperation");
 		// Log that this logical operation starts
 		tx.recoveryMgr().logLogicalStart();
 
+		profiler.startComponentProfiler("insertFhpOperation");
 		if (fhp.hasDeletedSlots()) {
 			// Insert into a deleted slot
-			moveToRecordId(fhp.getLastDeletedSlot());
+			RecordId lastDeletedSlot = fhp.getLastDeletedSlot();
+			profiler.stopComponentProfiler("insertFhpOperation");
+			moveToRecordId(lastDeletedSlot);
 			RecordId lds = rp.insertIntoDeletedSlot();
 			fhp.setLastDeletedSlot(lds);
 		} else {
 			// Insert into a empty slot
 			if (!fhp.hasDataRecords()) { // no record inserted before
 				// Create the first data block
+				profiler.stopComponentProfiler("insertFhpOperation");
 				appendBlock();
 				moveTo(1);
 				rp.insertIntoNextEmptySlot();
 			} else {
 				// Find the tail page
 				RecordId tailSlot = fhp.getTailSolt();
+				profiler.stopComponentProfiler("insertFhpOperation");
 				moveToRecordId(tailSlot);
 				while (!rp.insertIntoNextEmptySlot()) {
 					if (atLastBlock())
@@ -258,7 +277,9 @@ public class RecordFile implements Record {
 					moveTo(currentBlkNum + 1);
 				}
 			}
+			profiler.startComponentProfiler("insertFhpOperation");
 			fhp.setTailSolt(currentRecordId());
+			profiler.stopComponentProfiler("insertFhpOperation");
 		}
 
 		// Log that this logical operation ends
@@ -266,7 +287,9 @@ public class RecordFile implements Record {
 		tx.recoveryMgr().logRecordFileInsertionEnd(ti.tableName(), insertedRid.block().number(), insertedRid.id());
 
 		// Close the header (release the header lock)
+		profiler.startComponentProfiler("insertFhpOperation");
 		closeHeader();
+		profiler.stopComponentProfiler("insertFhpOperation");
 	}
 
 	/**
@@ -374,8 +397,12 @@ public class RecordFile implements Record {
 	}
 
 	private void appendBlock() {
-		if (!isTempTable())
+		if (!isTempTable()) {
+			TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+			profiler.startComponentProfiler("waitFileLock");
 			tx.concurrencyMgr().modifyFile(fileName);
+			profiler.stopComponentProfiler("waitFileLock");
+		}
 		RecordFormatter fmtr = new RecordFormatter(ti);
 		Buffer buff = tx.bufferMgr().pinNew(fileName, fmtr);
 		tx.bufferMgr().unpin(buff);

@@ -37,6 +37,7 @@ import org.vanilladb.core.storage.metadata.TableInfo;
 import org.vanilladb.core.storage.metadata.TableMgr;
 import org.vanilladb.core.storage.record.RecordFile;
 import org.vanilladb.core.storage.tx.Transaction;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * The index manager. The index manager has similar functionality to the table
@@ -184,9 +185,12 @@ public class IndexMgr {
 	 * @return a map of IndexInfo objects, keyed by their field names
 	 */
 	public List<IndexInfo> getIndexInfo(String tblName, String fldName, Transaction tx) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		// Check the cache
 		if (!loadedTables.contains(tblName)) {
+			profiler.startComponentProfiler("indexReadFromFile");
 			readFromFile(tblName, tx);
+			profiler.stopComponentProfiler("indexReadFromFile");
 		}
 		
 		// Fetch from the cache

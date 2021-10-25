@@ -29,6 +29,7 @@ import org.vanilladb.core.storage.index.SearchKeyType;
 import org.vanilladb.core.storage.index.btree.BTreeIndex.SearchPurpose;
 import org.vanilladb.core.storage.tx.Transaction;
 import org.vanilladb.core.storage.tx.concurrency.ConcurrencyMgr;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * A B-tree directory page that iterates over the B-tree directory blocks in a
@@ -227,7 +228,12 @@ public class BTreeDir {
 		// search from root to level 0
 		dirsMayBeUpdated = new ArrayList<BlockId>();
 		BlockId parentBlk = currentPage.currentBlk();
+		
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("getBtreeRootLock");
 		ccMgr.crabDownDirBlockForModification(parentBlk);
+		profiler.stopComponentProfiler("getBtreeRootLock");
+		
 		long childBlkNum = findChildBlockNumber(searchKey);
 		BlockId childBlk;
 		dirsMayBeUpdated.add(parentBlk);
@@ -263,7 +269,12 @@ public class BTreeDir {
 	private BlockId searchForDelete(SearchKey searchKey, String leafFileName) {
 		// search from root to level 0
 		BlockId parentBlk = currentPage.currentBlk();
+		
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("getBtreeRootLock");
 		ccMgr.crabDownDirBlockForRead(parentBlk);
+		profiler.stopComponentProfiler("getBtreeRootLock");
+		
 		long childBlkNum = findChildBlockNumber(searchKey);
 		BlockId childBlk;
 
@@ -294,7 +305,12 @@ public class BTreeDir {
 	private BlockId searchForRead(SearchKey searchKey, String leafFileName) {
 		// search from root to level 0
 		BlockId parentBlk = currentPage.currentBlk();
+		
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("getBtreeRootLock");
 		ccMgr.crabDownDirBlockForRead(parentBlk);
+		profiler.stopComponentProfiler("getBtreeRootLock");
+		
 		long childBlkNum = findChildBlockNumber(searchKey);
 		BlockId childBlk;
 
