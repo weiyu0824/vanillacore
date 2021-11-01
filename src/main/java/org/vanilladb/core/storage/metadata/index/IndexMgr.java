@@ -193,11 +193,15 @@ public class IndexMgr {
 			profiler.stopComponentProfiler("indexReadFromFile");
 		}
 		
+		profiler.startComponentProfiler("fetchIiMapFromIiMapByTblAndFlds");
 		// Fetch from the cache
 		Map<String, List<IndexInfo>> iiMap = iiMapByTblAndFlds.get(tblName);
+		profiler.stopComponentProfiler("fetchIiMapFromIiMapByTblAndFlds");
 		if (iiMap == null)
 			return Collections.emptyList(); // avoid object creation
+		profiler.startComponentProfiler("iiMapOperation");
 		List<IndexInfo> iiList = iiMap.get(fldName);
+		profiler.stopComponentProfiler("iiMapOperation");
 		if (iiList == null)
 			return Collections.emptyList(); // avoid object creation
 		

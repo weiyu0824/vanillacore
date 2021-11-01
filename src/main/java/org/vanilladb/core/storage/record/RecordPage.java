@@ -33,6 +33,7 @@ import org.vanilladb.core.storage.file.Page;
 import org.vanilladb.core.storage.log.LogSeqNum;
 import org.vanilladb.core.storage.metadata.TableInfo;
 import org.vanilladb.core.storage.tx.Transaction;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * Manages the placement and access of records in a block.
@@ -351,19 +352,33 @@ public class RecordPage implements Record {
 	}
 
 	private Constant getVal(int offset, Type type) {
-		if (!isTempTable())
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		if (!isTempTable()) {
+			profiler.startComponentProfiler("recordPageReadRecordLock");
 			tx.concurrencyMgr().readRecord(new RecordId(blk, currentSlot));
-		return currentBuff.getVal(offset, type);
+			profiler.stopComponentProfiler("recordPageReadRecordLock");
+		}
+		profiler.startComponentProfiler("bufferGetVal");
+		Constant c = currentBuff.getVal(offset, type);
+		profiler.stopComponentProfiler("bufferGetVal");
+		return c;
 	}
 
 	private void setVal(int offset, Constant val) {
 		if (tx.isReadOnly() && !isTempTable())
 			throw new UnsupportedOperationException();
-		if (!isTempTable())
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		if (!isTempTable()) {
+			profiler.startComponentProfiler("recordPageModifyRecordLock");
 			tx.concurrencyMgr().modifyRecord(new RecordId(blk, currentSlot));
+			profiler.stopComponentProfiler("recordPageModifyRecordLock");
+		}
+			
 		LogSeqNum lsn = doLog ? tx.recoveryMgr().logSetVal(currentBuff, offset, val)
 				: null;
+		profiler.startComponentProfiler("bufferSetVal");
 		currentBuff.setVal(offset, val, tx.getTransactionNumber(), lsn);
+		profiler.stopComponentProfiler("bufferSetVal");
 	}
 
 	private boolean isTempTable() {

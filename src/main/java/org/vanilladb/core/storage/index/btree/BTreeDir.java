@@ -230,9 +230,9 @@ public class BTreeDir {
 		BlockId parentBlk = currentPage.currentBlk();
 		
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
-		profiler.startComponentProfiler("getBtreeRootLock");
+		profiler.startComponentProfiler("searchForInsertGetBtreeRootLock");
 		ccMgr.crabDownDirBlockForModification(parentBlk);
-		profiler.stopComponentProfiler("getBtreeRootLock");
+		profiler.stopComponentProfiler("searchForInsertBtreeRootLock");
 		
 		long childBlkNum = findChildBlockNumber(searchKey);
 		BlockId childBlk;
@@ -307,9 +307,9 @@ public class BTreeDir {
 		BlockId parentBlk = currentPage.currentBlk();
 		
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
-		profiler.startComponentProfiler("getBtreeRootLock");
+		profiler.startComponentProfiler("searchForReadGetBtreeRootLock");
 		ccMgr.crabDownDirBlockForRead(parentBlk);
-		profiler.stopComponentProfiler("getBtreeRootLock");
+		profiler.stopComponentProfiler("searchForReadGetBtreeRootLock");
 		
 		long childBlkNum = findChildBlockNumber(searchKey);
 		BlockId childBlk;
