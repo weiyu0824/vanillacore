@@ -37,7 +37,7 @@ class BufferPoolMgr {
 	private Object[] anchors = new Object[1009];
 	
 	static {
-		System.out.println("Anchors: 1009, profile in detail_read");
+		System.out.println("Anchors: 1009, profile in fusion_count");
 	}
 
 	/**

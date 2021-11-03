@@ -341,13 +341,17 @@ public class RecordPage implements Record {
 	}
 
 	private boolean searchFor(int flag) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("recordPageSearchFor");
 		currentSlot++;
 		while (isValidSlot()) {
 			if ((Integer) getVal(currentPos(), INTEGER).asJavaVal() == flag) {
+				profiler.stopComponentProfiler("recordPageSearchFor");
 				return true;
 			}
 			currentSlot++;
 		}
+		profiler.stopComponentProfiler("recordPageSearchFor");
 		return false;
 	}
 

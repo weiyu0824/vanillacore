@@ -130,17 +130,26 @@ public class RecordFile implements Record {
 	 * @return false if there is no next record.
 	 */
 	public boolean next() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("recordFileNext");
+		
 		if (!isBeforeFirsted)
 			throw new IllegalStateException("You must call beforeFirst() before iterating table '"
 					+ ti.tableName() + "'");
 		
-		if (currentBlkNum == 0 && !moveTo(1))
+		if (currentBlkNum == 0 && !moveTo(1)) {
+			profiler.stopComponentProfiler("recordFileNext");
 			return false;
+		}
 		while (true) {
-			if (rp.next())
+			if (rp.next()) {
+				profiler.stopComponentProfiler("recordFileNext");
 				return true;
-			if (!moveTo(currentBlkNum + 1))
+			}
+			if (!moveTo(currentBlkNum + 1)) {
+				profiler.stopComponentProfiler("recordFileNext");
 				return false;
+			}
 		}
 	}
 
@@ -385,14 +394,19 @@ public class RecordFile implements Record {
 	}
 
 	private boolean moveTo(long b) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("recordFileMoveTo");
 		if (rp != null)
 			rp.close();
 		
-		if (b >= fileSize()) // block b not allocated yet
+		if (b >= fileSize()) { // block b not allocated yet
+			profiler.stopComponentProfiler("recordFileMoveTo");
 			return false;
+		}
 		currentBlkNum = b;
 		BlockId blk = new BlockId(fileName, currentBlkNum);
 		rp = new RecordPage(blk, ti, tx, doLog);
+		profiler.stopComponentProfiler("recordFileMoveTo");
 		return true;
 	}
 

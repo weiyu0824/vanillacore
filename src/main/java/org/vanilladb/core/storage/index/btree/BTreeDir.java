@@ -232,7 +232,7 @@ public class BTreeDir {
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		profiler.startComponentProfiler("searchForInsertGetBtreeRootLock");
 		ccMgr.crabDownDirBlockForModification(parentBlk);
-		profiler.stopComponentProfiler("searchForInsertBtreeRootLock");
+		profiler.stopComponentProfiler("searchForInsertGetBtreeRootLock");
 		
 		long childBlkNum = findChildBlockNumber(searchKey);
 		BlockId childBlk;

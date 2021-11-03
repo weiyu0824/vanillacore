@@ -30,6 +30,7 @@ import org.vanilladb.core.storage.index.SearchRange;
 import org.vanilladb.core.storage.metadata.index.IndexInfo;
 import org.vanilladb.core.storage.metadata.statistics.Histogram;
 import org.vanilladb.core.storage.tx.Transaction;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * The {@link Plan} class corresponding to the <em>indexselect</em> relational
@@ -72,10 +73,21 @@ public class IndexSelectPlan implements Plan {
 	@Override
 	public Scan open() {
 		// throws an exception if p is not a tableplan.
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("indexSelectPlanTableScanOpen");
 		TableScan ts = (TableScan) tp.open();
+		profiler.stopComponentProfiler("indexSelectPlanTableScanOpen");
+		
+		profiler.startComponentProfiler("indexSelectPlanIndexOpen");
 		Index idx = ii.open(tx);
-		return new IndexSelectScan(idx, 
+		profiler.stopComponentProfiler("indexSelectPlanIndexOpen");
+		
+		profiler.startComponentProfiler("indexSelectPlanNewIndexSelectScan");
+		IndexSelectScan temp = new IndexSelectScan(idx, 
 				new SearchRange(ii.fieldNames(), schema(), searchRanges), ts);
+		profiler.stopComponentProfiler("indexSelectPlanNewIndexSelectScan");
+		
+		return temp;
 	}
 
 	/**

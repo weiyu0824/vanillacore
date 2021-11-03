@@ -22,6 +22,7 @@ import org.vanilladb.core.sql.Constant;
 import org.vanilladb.core.storage.index.Index;
 import org.vanilladb.core.storage.index.SearchRange;
 import org.vanilladb.core.storage.record.RecordId;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * The scan class corresponding to the select relational algebra operator.
@@ -69,7 +70,10 @@ public class IndexSelectScan implements UpdateScan {
 	 */
 	@Override
 	public boolean next() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("indexSelectScanNext");
 		boolean ok = idx.next();
+		profiler.stopComponentProfiler("indexSelectScanNext");
 		if (ok) {
 			RecordId rid = idx.getDataRecordId();
 			ts.moveToRecordId(rid);

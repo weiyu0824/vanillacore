@@ -29,6 +29,7 @@ import org.vanilladb.core.storage.index.SearchRange;
 import org.vanilladb.core.storage.record.RecordId;
 import org.vanilladb.core.storage.tx.Transaction;
 import org.vanilladb.core.storage.tx.concurrency.ConcurrencyMgr;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * A B-tree leaf page that iterates over the B-tree leaf blocks in a file.
@@ -209,6 +210,8 @@ public class BTreeLeaf {
 	 * @return false if there are no more leaf records for the search key
 	 */
 	public boolean next() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("btreeNext");
 		while (true) {
 			currentSlot++;
 			if (!isOverflowing) { // not in an overflow block
@@ -218,6 +221,7 @@ public class BTreeLeaf {
 						moveTo(getSiblingFlag(currentPage), -1);
 						continue;
 					}
+					profiler.stopComponentProfiler("btreeNext");
 					return false;
 					// if the key of this slot match what we want
 				} else if (searchRange.match(getKey(currentPage, currentSlot, keyType.length()))) {
@@ -230,11 +234,14 @@ public class BTreeLeaf {
 						overflowFrom = currentPage.currentBlk().number();
 						moveTo(getOverflowFlag(currentPage), 0);
 					}
+					profiler.stopComponentProfiler("btreeNext");
 					return true;
 				} else if (searchRange.betweenMinAndMax(getKey(currentPage, currentSlot, keyType.length()))) {
 					continue;
-				} else
+				} else {
+					profiler.stopComponentProfiler("btreeNext");
 					return false;
+				}
 			} else { // in an overflow block
 				// All the records in an overflow block have the same key
 				// so that we do not need to check the key in an overflow block.
@@ -249,7 +256,7 @@ public class BTreeLeaf {
 						overflowFrom = -1;
 					}
 				}
-				
+				profiler.stopComponentProfiler("btreeNext");
 				return true;
 			}
 		}
@@ -275,6 +282,8 @@ public class BTreeLeaf {
 	 *         no split
 	 */
 	public DirEntry insert(RecordId dataRecordId) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("btreeInsert");
 		// search range must be a constant
 		if (!searchRange.isSingleValue())
 			throw new IllegalStateException();
@@ -298,11 +307,14 @@ public class BTreeLeaf {
 							getSiblingFlag(currentPage) });
 			setOverflowFlag(currentPage, -1);
 			setSiblingFlag(currentPage, newBlkNum);
+			profiler.stopComponentProfiler("btreeInsert");
 			return new DirEntry(splitKey, newBlkNum);
 		}
 
-		if (!currentPage.isFull())
+		if (!currentPage.isFull()) {
+			profiler.stopComponentProfiler("btreeInsert");
 			return null;
+		}
 		
 		/*
 		 * If this block is full, then split the block and return the directory
@@ -321,6 +333,7 @@ public class BTreeLeaf {
 					currentPage.currentBlk().number() : getOverflowFlag(currentPage);
 			long newBlkNum = currentPage.split(1, new long[] { overflowFlag, -1 });
 			setOverflowFlag(currentPage, newBlkNum);
+			profiler.stopComponentProfiler("btreeInsert");
 			return null;
 			
 		} else {
@@ -344,6 +357,7 @@ public class BTreeLeaf {
 			long newBlkNum = currentPage.split(splitPos, new long[] { -1,
 					getSiblingFlag(currentPage) });
 			setSiblingFlag(currentPage, newBlkNum);
+			profiler.stopComponentProfiler("btreeInsert");
 			return new DirEntry(splitKey, newBlkNum);
 		}
 	}
@@ -462,12 +476,15 @@ public class BTreeLeaf {
 	 * specified position.
 	 */
 	private void moveTo(long blkNum, int slot) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("btreeMoveTo");
 		moveFrom = currentPage.currentBlk().number(); // for deletion
 		BlockId blk = new BlockId(currentPage.currentBlk().fileName(), blkNum);
 		ccMgr.readLeafBlock(blk);
 		currentPage.close();
 		currentPage = new BTreePage(blk, NUM_FLAGS, schema, tx);
 		currentSlot = slot;
+		profiler.stopComponentProfiler("btreeMoveTo");
 	}
 	
 	private void insert(int slot, SearchKey key, RecordId rid) {
