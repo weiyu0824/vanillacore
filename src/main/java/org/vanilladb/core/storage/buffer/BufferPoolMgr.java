@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.vanilladb.core.server.VanillaDb;
 import org.vanilladb.core.storage.file.BlockId;
 import org.vanilladb.core.storage.file.FileMgr;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * Manages the pinning and unpinning of buffers to blocks.
@@ -76,9 +77,12 @@ class BufferPoolMgr {
 	 * Flushes all dirty buffers.
 	 */
 	void flushAll() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		for (Buffer buff : bufferPool) {
 			try {
+				profiler.startComponentProfiler("Buffer External Lock");
 				buff.getExternalLock().lock();
+				profiler.stopComponentProfiler("Buffer External Lock");
 				buff.flush();
 			} finally {
 				buff.getExternalLock().unlock();
@@ -97,8 +101,11 @@ class BufferPoolMgr {
 	 * @return the pinned buffer
 	 */
 	Buffer pin(BlockId blk) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Prepare Anchor in BufferPoolMgr Pin");
 		// Only the txs acquiring the same block will be blocked
 		synchronized (prepareAnchor(blk)) {
+			profiler.stopComponentProfiler("Prepare Anchor in BufferPoolMgr Pin");
 			// Find existing buffer
 			Buffer buff = findExistingBuffer(blk);
 
@@ -115,7 +122,9 @@ class BufferPoolMgr {
 					buff = bufferPool[currBlk];
 					
 					// Get the lock of buffer if it is free
+					profiler.startComponentProfiler("Buffer External Lock");
 					if (buff.getExternalLock().tryLock()) {
+						profiler.stopComponentProfiler("Buffer External Lock");
 						try {
 							// Check if there is no one use it
 							if (!buff.isPinned() && !buff.checkRecentlyPinnedAndReset()) {
@@ -146,7 +155,9 @@ class BufferPoolMgr {
 			// If it exists
 			} else {
 				// Get the lock of buffer
+				profiler.startComponentProfiler("Buffer External Lock");
 				buff.getExternalLock().lock();
+				profiler.stopComponentProfiler("Buffer External Lock");
 				
 				try {
 					// Check its block id before pinning since it might be swapped
@@ -178,9 +189,11 @@ class BufferPoolMgr {
 	 * @return the pinned buffer
 	 */
 	Buffer pinNew(String fileName, PageFormatter fmtr) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		// Only the txs acquiring to append the block on the same file will be blocked
+		profiler.startComponentProfiler("Prepare Anchor in BufferPoolMgr PinNew");
 		synchronized (prepareAnchor(fileName)) {
-			
+			profiler.stopComponentProfiler("Prepare Anchor in BufferPoolMgr PinNew");
 			// Choose Unpinned Buffer
 			int lastReplacedBuff = this.lastReplacedBuff;
 			int currBlk = (lastReplacedBuff + 1) % bufferPool.length;
@@ -188,7 +201,9 @@ class BufferPoolMgr {
 				Buffer buff = bufferPool[currBlk];
 				
 				// Get the lock of buffer if it is free
+				profiler.startComponentProfiler("Buffer External Lock");
 				if (buff.getExternalLock().tryLock()) {
+					profiler.stopComponentProfiler("Buffer External Lock");
 					try {
 						if (!buff.isPinned() && !buff.checkRecentlyPinnedAndReset()) {
 							this.lastReplacedBuff = currBlk;
@@ -224,10 +239,13 @@ class BufferPoolMgr {
 	 *            the buffers to be unpinned
 	 */
 	void unpin(Buffer... buffs) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		for (Buffer buff : buffs) {
 			try {
 				// Get the lock of buffer
+				profiler.startComponentProfiler("Buffer External Lock");
 				buff.getExternalLock().lock();
+				profiler.stopComponentProfiler("Buffer External Lock");
 				buff.unpin();
 				if (!buff.isPinned())
 					numAvailable.incrementAndGet();

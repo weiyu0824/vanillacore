@@ -27,6 +27,7 @@ import org.vanilladb.core.sql.Type;
 import org.vanilladb.core.storage.file.BlockId;
 import org.vanilladb.core.storage.file.Page;
 import org.vanilladb.core.storage.log.LogSeqNum;
+import org.vanilladb.core.util.TransactionProfiler;
 
 /**
  * An individual buffer. A buffer wraps a page and stores information about its
@@ -85,7 +86,10 @@ public class Buffer {
 	 * @return the constant value at that offset
 	 */
 	public Constant getVal(int offset, Type type) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Read Lock");
 		internalLock.readLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Read Lock");
 		try {
 			if (offset < 0 || offset >= BUFFER_SIZE)
 				throw new IndexOutOfBoundsException("" + offset);
@@ -97,7 +101,10 @@ public class Buffer {
 	}
 	
 	void setVal(int offset, Constant val) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		try {
 			if (offset < 0 || offset >= BUFFER_SIZE)
 				throw new IndexOutOfBoundsException("" + offset);
@@ -125,7 +132,10 @@ public class Buffer {
 	 *            the LSN of the corresponding log record
 	 */
 	public void setVal(int offset, Constant val, long txNum, LogSeqNum lsn) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		try {
 			if (offset < 0 || offset >= BUFFER_SIZE)
 				throw new IndexOutOfBoundsException("" + offset);
@@ -150,7 +160,10 @@ public class Buffer {
 	 * @return the LSN of the latest affected log record
 	 */
 	public LogSeqNum lastLsn(){
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Read Lock");
 		internalLock.readLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Read Lock");
 		try {
 			return lastLsn;
 		} finally {
@@ -164,7 +177,10 @@ public class Buffer {
 	 * @return a block ID
 	 */
 	public BlockId block() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Read Lock");
 		internalLock.readLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Read Lock");
 		try {
 			return blk;
 		} finally {
@@ -199,7 +215,10 @@ public class Buffer {
 	}
 
 	protected void close() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		try {
 			contents.close();
 		} finally {
@@ -213,7 +232,10 @@ public class Buffer {
 	 * to writing the page to disk.
 	 */
 	void flush() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		flushLock.lock();
 		try {
 			if (isNew || isModified) {
@@ -232,7 +254,10 @@ public class Buffer {
 	 * Increases the buffer's pin count.
 	 */
 	void pin() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		try {
 			pins++;
 			isRecentlyPinned.set(true);
@@ -245,7 +270,10 @@ public class Buffer {
 	 * Decreases the buffer's pin count.
 	 */
 	void unpin() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		try {
 			pins--;
 		} finally {
@@ -260,7 +288,10 @@ public class Buffer {
 	 * @return true if the buffer is pinned
 	 */
 	boolean isPinned() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Read Lock");
 		internalLock.readLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Read Lock");
 		try {
 			return pins > 0;
 		} finally {
@@ -278,7 +309,10 @@ public class Buffer {
 	 * @return true if the buffer is dirty
 	 */
 	boolean isModified() {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		try {
 			return isModified;
 		} finally {
@@ -295,7 +329,10 @@ public class Buffer {
 	 *            a block ID
 	 */
 	void assignToBlock(BlockId blk) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		try {
 			flush();
 			this.blk = blk;
@@ -318,7 +355,10 @@ public class Buffer {
 	 *            a page formatter, used to initialize the page
 	 */
 	void assignToNew(String fileName, PageFormatter fmtr) {
+		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
+		profiler.startComponentProfiler("Buffer Internal Write Lock");
 		internalLock.writeLock().lock();
+		profiler.stopComponentProfiler("Buffer Internal Write Lock");
 		try {
 			flush();
 			fmtr.format(this);
