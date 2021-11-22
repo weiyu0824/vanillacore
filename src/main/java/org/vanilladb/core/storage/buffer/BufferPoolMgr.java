@@ -18,6 +18,7 @@ package org.vanilladb.core.storage.buffer;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 import org.vanilladb.core.server.VanillaDb;
 import org.vanilladb.core.storage.file.BlockId;
@@ -28,6 +29,10 @@ import org.vanilladb.core.util.TransactionProfiler;
  * Manages the pinning and unpinning of buffers to blocks.
  */
 class BufferPoolMgr {
+	static {
+		System.out.println("won't swap Index buffer----------------------------------------------");
+	}
+	
 	private Buffer[] bufferPool;
 	private Map<BlockId, Buffer> blockMap;
 	private volatile int lastReplacedBuff;
@@ -79,13 +84,20 @@ class BufferPoolMgr {
 	void flushAll() {
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		for (Buffer buff : bufferPool) {
-			try {
-				profiler.startComponentProfiler("Buffer External Lock");
-				buff.getExternalLock().lock();
-				profiler.stopComponentProfiler("Buffer External Lock");
+			// OPTIMIZATION: Get the external lock of those non-index buffers,
+			// because they might be swapped
+			if (buff.block() == null || !buff.block().fileName().contains(".idx")) {
+				try {
+					profiler.startComponentProfiler("Buffer External Lock");
+					buff.getExternalLock().lock();
+					profiler.stopComponentProfiler("Buffer External Lock");
+					buff.flush();
+				} finally {
+					buff.getExternalLock().unlock();
+				}
+			} else {
+				// directly flush idx buffer, because we won't swap it
 				buff.flush();
-			} finally {
-				buff.getExternalLock().unlock();
 			}
 		}
 	}
@@ -121,31 +133,34 @@ class BufferPoolMgr {
 				while (currBlk != lastReplacedBuff) {
 					buff = bufferPool[currBlk];
 					
-					// Get the lock of buffer if it is free
-					profiler.startComponentProfiler("Buffer External Lock");
-					if (buff.getExternalLock().tryLock()) {
-						profiler.stopComponentProfiler("Buffer External Lock");
-						try {
-							// Check if there is no one use it
-							if (!buff.isPinned() && !buff.checkRecentlyPinnedAndReset()) {
-								this.lastReplacedBuff = currBlk;
-								
-								// Swap
-								BlockId oldBlk = buff.block();
-								if (oldBlk != null)
-									blockMap.remove(oldBlk);
-								buff.assignToBlock(blk);
-								blockMap.put(blk, buff);
-								if (!buff.isPinned())
-									numAvailable.decrementAndGet();
-								
-								// Pin this buffer
-								buff.pin();
-								return buff;
+					// OPTIMIZATION: Swap non-index buffers
+					if (buff.block() == null || !buff.block().fileName().contains(".idx")) {
+						// Get the lock of buffer if it is free
+						profiler.startComponentProfiler("Buffer External Lock");
+						if (buff.getExternalLock().tryLock()) {
+							profiler.stopComponentProfiler("Buffer External Lock");
+							try {
+								// Check if there is no one use it
+								if (!buff.isPinned() && !buff.checkRecentlyPinnedAndReset()) {
+									this.lastReplacedBuff = currBlk;
+									
+									// Swap
+									BlockId oldBlk = buff.block();
+									if (oldBlk != null)
+										blockMap.remove(oldBlk);
+									buff.assignToBlock(blk);
+									blockMap.put(blk, buff);
+									if (!buff.isPinned())
+										numAvailable.decrementAndGet();
+									
+									// Pin this buffer
+									buff.pin();
+									return buff;
+								}
+							} finally {
+								// Release the lock of buffer
+								buff.getExternalLock().unlock();
 							}
-						} finally {
-							// Release the lock of buffer
-							buff.getExternalLock().unlock();
 						}
 					}
 					currBlk = (currBlk + 1) % bufferPool.length;
@@ -154,6 +169,12 @@ class BufferPoolMgr {
 				
 			// If it exists
 			} else {
+				// OPTIMIZATION: Early return index buffers.
+				// We don't have to pin the index buffers more than one time
+				// because we won't unpin those index buffers.
+				if (buff.block().fileName().contains(".idx")) {
+					return buff;
+				}
 				// Get the lock of buffer
 				profiler.startComponentProfiler("Buffer External Lock");
 				buff.getExternalLock().lock();
@@ -200,30 +221,33 @@ class BufferPoolMgr {
 			while (currBlk != lastReplacedBuff) {
 				Buffer buff = bufferPool[currBlk];
 				
-				// Get the lock of buffer if it is free
-				profiler.startComponentProfiler("Buffer External Lock");
-				if (buff.getExternalLock().tryLock()) {
-					profiler.stopComponentProfiler("Buffer External Lock");
-					try {
-						if (!buff.isPinned() && !buff.checkRecentlyPinnedAndReset()) {
-							this.lastReplacedBuff = currBlk;
-							
-							// Swap
-							BlockId oldBlk = buff.block();
-							if (oldBlk != null)
-								blockMap.remove(oldBlk);
-							buff.assignToNew(fileName, fmtr);
-							blockMap.put(buff.block(), buff);
-							if (!buff.isPinned())
-								numAvailable.decrementAndGet();
-							
-							// Pin this buffer
-							buff.pin();
-							return buff;
+				// OPTIMIZATION: Swap non-index buffers
+				if (buff.block() == null || !buff.block().fileName().contains(".idx")) {
+					// Get the lock of buffer if it is free
+					profiler.startComponentProfiler("Buffer External Lock");
+					if (buff.getExternalLock().tryLock()) {
+						profiler.stopComponentProfiler("Buffer External Lock");
+						try {
+							if (!buff.isPinned() && !buff.checkRecentlyPinnedAndReset()) {
+								this.lastReplacedBuff = currBlk;
+								
+								// Swap
+								BlockId oldBlk = buff.block();
+								if (oldBlk != null)
+									blockMap.remove(oldBlk);
+								buff.assignToNew(fileName, fmtr);
+								blockMap.put(buff.block(), buff);
+								if (!buff.isPinned())
+									numAvailable.decrementAndGet();
+								
+								// Pin this buffer
+								buff.pin();
+								return buff;
+							}
+						} finally {
+							// Release the lock of buffer
+							buff.getExternalLock().unlock();
 						}
-					} finally {
-						// Release the lock of buffer
-						buff.getExternalLock().unlock();
 					}
 				}
 				currBlk = (currBlk + 1) % bufferPool.length;
@@ -241,9 +265,17 @@ class BufferPoolMgr {
 	void unpin(Buffer... buffs) {
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		for (Buffer buff : buffs) {
+			// OPTIMIZATION: Ignore those idx buffers
+			if (buff.block() != null && buff.block().fileName().contains(".idx")) {
+				continue;
+			}
 			try {
 				// Get the lock of buffer
 				profiler.startComponentProfiler("Buffer External Lock");
+//				int num = ((ReentrantLock)buff.getExternalLock()).getQueueLength();
+//				if (num > 0) {
+//					System.out.println(num);
+//				}
 				buff.getExternalLock().lock();
 				profiler.stopComponentProfiler("Buffer External Lock");
 				buff.unpin();

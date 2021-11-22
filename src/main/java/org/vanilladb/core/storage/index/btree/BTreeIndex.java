@@ -16,6 +16,7 @@
 package org.vanilladb.core.storage.index.btree;
 
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.vanilladb.core.server.VanillaDb;
 import org.vanilladb.core.sql.Schema;
@@ -34,15 +35,19 @@ import org.vanilladb.core.storage.tx.concurrency.ConcurrencyMgr;
  * A B-tree implementation of {@link Index}.
  */
 public class BTreeIndex extends Index {
-	
+	static {
+		System.out.println("Cache index fileSize --------------------------------------------");
+	}
 	protected static enum SearchPurpose { READ, INSERT, DELETE };
-
+	private static ConcurrentHashMap<String, Boolean> cachedIsFileNotEmpty = new ConcurrentHashMap<String, Boolean>();
+	
 	private ConcurrencyMgr ccMgr;
 	private String leafFileName, dirFileName;
 	private BTreeLeaf leaf = null;
 	private BlockId rootBlk;
 	private List<BlockId> dirsMayBeUpdated;
 	private boolean isBeforeFirsted;
+
 
 	public static long searchCost(SearchKeyType keyType, long totRecs, long matchRecs) {
 		int dirRpb = Buffer.BUFFER_SIZE / BTreePage.slotSize(BTreeDir.schema(keyType));
@@ -71,13 +76,17 @@ public class BTreeIndex extends Index {
 		
 		// Initialize the first leaf block (if it needed)
 		leafFileName = BTreeLeaf.getFileName(ii.indexName());
-		if (fileSize(leafFileName) == 0)
+		
+		// OPTIMIZATION: This optimization might be defective
+		if ((cachedIsFileNotEmpty.get(leafFileName) == null || !cachedIsFileNotEmpty.get(leafFileName)) && fileSize(leafFileName) == 0)
 			appendBlock(leafFileName, BTreeLeaf.schema(keyType), new long[] { -1, -1 });
 
 		// Initialize the first directory block (if it needed)
 		dirFileName = BTreeDir.getFileName(ii.indexName());
 		rootBlk = new BlockId(dirFileName, 0);
-		if (fileSize(dirFileName) == 0)
+		
+		// OPTIMIZATION: This optimization might be defective
+		if ((cachedIsFileNotEmpty.get(dirFileName) == null || !cachedIsFileNotEmpty.get(dirFileName)) && fileSize(dirFileName) == 0)
 			appendBlock(dirFileName, BTreeDir.schema(keyType), new long[] { 0 });
 		
 		// Insert an initial directory entry (if it needed)
@@ -256,7 +265,9 @@ public class BTreeIndex extends Index {
 
 	private long fileSize(String fileName) {
 		ccMgr.readFile(fileName);
-		return VanillaDb.fileMgr().size(fileName);
+		long fileSize = VanillaDb.fileMgr().size(fileName);
+		cachedIsFileNotEmpty.put(fileName, fileSize > 0);
+		return fileSize;
 	}
 
 	private BlockId appendBlock(String fileName, Schema sch, long[] flags) {

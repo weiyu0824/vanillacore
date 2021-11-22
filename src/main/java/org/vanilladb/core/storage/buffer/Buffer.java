@@ -37,7 +37,9 @@ import org.vanilladb.core.util.TransactionProfiler;
  * corresponding log record.
  */
 public class Buffer {
-	
+	static {
+		System.out.println("not fairness lock----------------------------------");
+	}
 	/**
 	 * The available size (in bytes) for a buffer. Besides the data from users,
 	 * a buffer also puts some meta-data in front of them. The size of a buffer,
