@@ -30,7 +30,7 @@ import org.vanilladb.core.util.TransactionProfiler;
  */
 class BufferPoolMgr {
 	static {
-		System.out.println("won't swap Index buffer----------------------------------------------");
+		System.out.println("won't swap Index buffer, optimize Block()----------------------------------------------");
 	}
 	
 	private Buffer[] bufferPool;
@@ -134,7 +134,8 @@ class BufferPoolMgr {
 					buff = bufferPool[currBlk];
 					
 					// OPTIMIZATION: Swap non-index buffers
-					if (buff.block() == null || !buff.block().fileName().contains(".idx")) {
+					BlockId tmpBlock = buff.block();
+					if (tmpBlock == null || !tmpBlock.fileName().contains(".idx")) {
 						// Get the lock of buffer if it is free
 						profiler.startComponentProfiler("Buffer External Lock");
 						if (buff.getExternalLock().tryLock()) {
@@ -222,7 +223,8 @@ class BufferPoolMgr {
 				Buffer buff = bufferPool[currBlk];
 				
 				// OPTIMIZATION: Swap non-index buffers
-				if (buff.block() == null || !buff.block().fileName().contains(".idx")) {
+				BlockId tmpBlock = buff.block();
+				if (tmpBlock == null || !tmpBlock.fileName().contains(".idx")) {
 					// Get the lock of buffer if it is free
 					profiler.startComponentProfiler("Buffer External Lock");
 					if (buff.getExternalLock().tryLock()) {
@@ -266,7 +268,8 @@ class BufferPoolMgr {
 		TransactionProfiler profiler = TransactionProfiler.getLocalProfiler();
 		for (Buffer buff : buffs) {
 			// OPTIMIZATION: Ignore those idx buffers
-			if (buff.block() != null && buff.block().fileName().contains(".idx")) {
+			BlockId tmpBlock = buff.block();
+			if (tmpBlock != null && tmpBlock.fileName().contains(".idx")) {
 				continue;
 			}
 			try {
@@ -299,7 +302,8 @@ class BufferPoolMgr {
 
 	private Buffer findExistingBuffer(BlockId blk) {
 		Buffer buff = blockMap.get(blk);
-		if (buff != null && buff.block().equals(blk))
+//		if (buff != null && buff.block().equals(blk))
+		if (buff != null)
 			return buff;
 		return null;
 	}
